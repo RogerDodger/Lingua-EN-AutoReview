@@ -35,24 +35,10 @@ has rules => (
 	is      => 'rw',
 	isa     => 'ArrayRef[CodeRef]',
 	traits  => [ 'Array' ],
-	default => sub {
-		my @rules; 
-
-		# A bit hacky; reads this file to find the default rules
-		my $fn = __PACKAGE__; 
-		$fn =~ s/::/\//g; 
-		$fn =~ s/$/.pm/;
-
-		open CODE, "<", $INC{$fn};
-		while(<CODE>) {
-			if( /^sub (_[a-zA-Z0-9_]+)/ ) {
-				push @rules, \&$1;
-			}
-		}
-		close CODE;
-
-		return \@rules;
-	},
+	default => sub {[
+		\&_ascii_dashes,
+		\&_start_sentence_with_capital_letter,
+	]},
 	handles => {
 		all_rules => 'elements',
 		add_rule  => 'push',
@@ -102,12 +88,11 @@ Analyses a string of English prose.
 sub analyse ($) {
 	my( $self, $text ) = @_;
 
-	# Standardise newlines
-	$text =~ s/\r\n/\n/g;
-	$text =~ s/\n\r/\n/g;
-	$text =~ s/\r/\n/g;
+	# Clear object data
+	$self->errors([]);
 
-	$self->lines([ split /\n/, $text ]);
+	# Extract lines
+	$self->lines([ split /\r\n|\n\r|\n|\r/, $text ]);
 
 	for my $rule ( $self->all_rules ) {
 		my $error = Lingua::EN::AutoReview::Error->new;
@@ -181,11 +166,9 @@ sub _start_sentence_with_capital_letter {
 
 	for(my $i = 0; $i <= $#$lines; $i++) {
 
-		if( $lines->[$i] =~ /^[^\w\.]*?(\w)/ ) {
-			# Check if the first word char on the line is uppercase
-			if( $1 ne uc $1 ) {
-				$error->found_at([$i, index($lines->[$i], $1), 1]);	
-			}
+		# Check if the first word char on the line is lowercase
+		if( $lines->[$i] =~ /^([^\w\.]*?\p{Lowercase})/ ) {
+			$error->found_at([$i, 0, length $1]);
 		}
 
 		my $index = -1;
@@ -198,13 +181,9 @@ sub _start_sentence_with_capital_letter {
 			my $str = substr $lines->[$i], $index;
 
 			# Check if the full stop is followed by any amount of non-words,
-			# followed by a single word character
-			if( $str =~ /^(\.[^\w\.]*?(\w))/ ) {
-
-				# Found an error if the word char is not upper case
-				if( $2 ne uc $2 ) {
-					$error->found_at([$i, $index, length $1]);
-				}	
+			# followed by a single lowercase character
+			if( $str =~ /^(\.[^\w\.]*?\p{Lowercase})/ ) {
+				$error->found_at([$i, $index, length $1]);
 			}
 
 		}
