@@ -29,6 +29,8 @@ requires (
    'Moose::Meta::Attribute::Native::Trait::Array' => 0,
 );
 
+install_script "script/*";
+
 install_as_cpan;
 auto_install;
 WriteAll;
