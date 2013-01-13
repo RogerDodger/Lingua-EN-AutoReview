@@ -4,7 +4,7 @@ use 5.014;
 use strict;
 use warnings FATAL => 'all';
 
-our $VERSION = 'v0.1.0';
+our $VERSION = 'v0.1.1';
 
 use Moose;
 use Lingua::EN::AutoReview::Error;
@@ -165,9 +165,12 @@ sub prettyprint {
 	print "Total errors found: $n.";
 }
 
-=head1 DEFAULT RULES
+=head1 DEFAULT RULES 
 
-The real meat of the analysis happens here.
+The following things are analysed by default. Check the source for exact implementation.
+
+* Sentences not beginning with capital letters
+* Hyphens used instead of dashes
 
 =cut
 
@@ -212,7 +215,7 @@ sub _start_sentence_with_capital_letter {
 sub _ascii_dashes {
 	my( $error, $lines, $lang ) = @_;
 
-	$error->msg("Multiple hyphens used in lieu of dashes.");
+	$error->msg("Hyphens used in lieu of dashes.");
 	$error->verbose_msg(
 		"Proper dash characters should be used where appropriate, rather than joining hyphens together. "
 		. "See [Wikipedia](http://en.wikipedia.org/wiki/Dash) for information on how to insert them."
@@ -276,10 +279,10 @@ Putting it all together:
 
     for(my $i = 0; $i <= $#$lines; $i++) {
       my $index = -$len;
-	  while( ($index = index $lines->[$i], $dash, $index + $len) >= 0 ) {
-	  	next if $index = 0; #Skip if at start of line
-	    $error->found_at([$i, $index, $len]);
-	  }
+      while( ($index = index $lines->[$i], $dash, $index + $len) >= 0 ) {
+        next if $index = 0; #Skip if at start of line
+        $error->found_at([$i, $index, $len]);
+      }
     }
 
   }
