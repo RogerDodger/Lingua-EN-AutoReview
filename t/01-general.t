@@ -1,5 +1,5 @@
-#!perl -T
-use 5.006;
+#!/usr/bin/env perl
+use 5.014;
 use strict;
 use warnings FATAL => 'all';
 use Test::More;
@@ -10,7 +10,7 @@ BEGIN {
     use_ok( 'Lingua::EN::AutoReview' ) || print "Bail out!\n";
 }
 
-Lingua::EN::AutoReview->new( verbose => 1)
+Lingua::EN::AutoReview->new(verbose => 1)
 	->analyse(eval { local $/; <DATA> })
 	->prettyprint;
 
@@ -19,4 +19,4 @@ lah blah blah. dog eat cat worl... but no
 
 ---
 
-The man -- whom none had cared to listen to, was now gone.
+The man -- whom none had cared to listen to -- was now gone.

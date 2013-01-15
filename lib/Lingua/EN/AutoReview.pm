@@ -1,13 +1,38 @@
 package Lingua::EN::AutoReview;
 
+use utf8;
 use 5.014;
 use strict;
 use warnings FATAL => 'all';
 
-our $VERSION = 'v0.1.1';
+our $VERSION = 'v0.1.4';
+
+=head1 NAME
+
+Lingua::EN::AutoReview - Identify common errors in English prose
+
+=head1 SYNOPSIS
+
+  use Lingua::EN::AutoReview;
+  
+  my $r = Lingua::EN::AutoReview->new( lang => 'GB' );
+
+  # Add your own rules if desired
+  $r->add_rule(sub {
+    my( $error, $lines, $lang ) = @_;
+    
+    #. . .
+  });
+
+  $r->analyse($prose);
+  
+  $r->prettyprint;
+
+=cut
 
 use Moose;
 use Lingua::EN::AutoReview::Error;
+use File::ShareDir;
 
 has lang => (
 	is  => 'rw',
@@ -51,31 +76,38 @@ has errors => (
 	traits  => [ 'Array' ],
 	default => sub { [] },
 	handles => {
-		all_errors => 'elements',
-		add_error  => 'push',
+		all_errors   => 'elements',
+		add_error    => 'push',
+		clear_errors => 'clear',
 	},
 );
 
-=head1 NAME
+sub _share_file_lines ($) {
+	my $fn = shift;
+	my @lines;
 
-Lingua::EN::AutoReview - Identify common errors in English prose
+	open R, "<", File::ShareDir::module_file(__PACKAGE__, $fn)
+						or die "Cannot open $fn: $!";
+	while(<R>) {
+		chomp;
+		next if /^#/;
+		next unless $_;
+		push @lines, $_;
+	}
+	close R;
 
-=head1 SYNOPSIS
+	return \@lines;
+}
 
-  use Lingua::EN::AutoReview;
-  
-  my $r = Lingua::EN::AutoReview->new( lang => 'GB' );
+sub _rule_by_regex {
+	my( $error, $lines, $pattern ) = @_;
 
-  # Add your own rules if desired
-  $r->add_rule(sub {
-    my( $error, $lines, $lang ) = @_;
-	
-    #. . .
-  });
-
-  $r->analyse($prose);
-  
-  $r->prettyprint;
+	for(my $i = 0; $i <= $#$lines; $i++) {
+		while( $lines->[$i] =~ /$pattern/g ) {
+			$error->found_at([$i, $-[0], $+[0] - $-[0]]);
+		}
+	}
+}
 
 =head1 METHODS
 
@@ -88,8 +120,9 @@ Analyses a string of English prose.
 sub analyse ($) {
 	my( $self, $text ) = @_;
 
-	# Clear object data
-	$self->errors([]);
+	# Clear data from previous analyses in case multiple texts
+	# are checked with the same AutoReview object
+	$self->clear_errors;
 
 	# Extract lines
 	$self->lines([ split /\r\n|\n\r|\n|\r/, $text ]);
@@ -133,8 +166,8 @@ sub prettyprint {
 				my $line = $self->lines->[ $_->[0] ];
 
 				# Give a little context to the error
-				my $pos = $_->[1] - 3;
-				my $len = $_->[2] + 6;
+				my $pos = $_->[1] - 5;
+				my $len = $_->[2] + 10;
 
 				print sprintf "   Line %d - `%s`",
 					$_->[0] + 1,
@@ -164,30 +197,27 @@ sub _start_sentence_with_capital_letter {
 
 	$error->msg("Sentences should start with a capital letter.");
 
+	my $abbrev = _share_file_lines("abbreviations.en");
+
+	# Variable-length look behind searches aren't implemented in Perl 5,
+	# but we can work around this by reversing everything, since variable-length
+	# look ahead searches *are* implemented. A bit of a pain in the neck, but it
+	# gets the job done.
+	$abbrev = join "|", map { quotemeta reverse $_ } @$abbrev;
+
+	my $pattern = qr`
+		\p{Lowercase}
+		[^\w\.]*?
+		(?:\.|$)
+		(?!$abbrev)
+	`x;
+
 	for(my $i = 0; $i <= $#$lines; $i++) {
-
-		# Check if the first word char on the line is lowercase
-		if( $lines->[$i] =~ /^([^\w\.]*?\p{Lowercase})/ ) {
-			$error->found_at([$i, 0, length $1]);
+		my $enil = reverse $lines->[$i];
+		my $length = length $enil;
+		while( $enil =~ /$pattern/g ) {
+			$error->found_at([$i, $length - $-[0], $+[0] - $-[0]])
 		}
-
-		my $index = -1;
-
-		while( ($index = index $lines->[$i], '.', $index + 1) >= 0 ) {
-
-			# Skip check if this full stop is preceded by another -- we may have an ellipsis
-			next if substr($lines->[$i], $index - 1, 1) eq '.';
-
-			my $str = substr $lines->[$i], $index;
-
-			# Check if the full stop is followed by any amount of non-words,
-			# followed by a single lowercase character
-			if( $str =~ /^(\.[^\w\.]*?\p{Lowercase})/ ) {
-				$error->found_at([$i, $index, length $1]);
-			}
-
-		}
-
 	}
 }
 
@@ -200,27 +230,12 @@ sub _ascii_dashes {
 		. "See [Wikipedia](http://en.wikipedia.org/wiki/Dash) for information on how to insert them."
 	);
 
-	for(my $i = 0; $i <= $#$lines; $i++) {
+	my $pattern = qr`
+		(?<=[^\-])
+		-{2,}
+	`x;
 
-		# Skip empty lines
-		next if $lines->[$i] =~ /^\W+$/;
-
-		my $index = -1;
-
-		while( ($index = index $lines->[$i], '-', $index + 1) >= 0 ) {
-
-			my $str = substr $lines->[$i], $index;
-
-			if( $str =~ /^(-{2,})/ ) {
-				$error->found_at([$i, $index, length $1]);
-
-				# Don't keep catching some really long string of hyphens
-				$index += length $1;
-			}
-
-		}
-
-	}
+	_rule_by_regex($error, $lines, $pattern);
 }
 
 =head1 ADDING RULES
@@ -275,7 +290,7 @@ Cameron Thornton E<lt>cthor@cpan.orgE<gt>
 Copyright (c) 2013 Cameron Thornton.
 
 This program is free software; you can redistribute it and/or modify it
-under the terms as perl itself.
+under the same terms as perl itself.
 
 =cut
 

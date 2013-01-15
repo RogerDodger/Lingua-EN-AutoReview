@@ -42,7 +42,7 @@ Cameron Thornton E<lt>cthor@cpan.orgE<gt>
 Copyright (c) 2013 Cameron Thornton.
 
 This program is free software; you can redistribute it and/or modify it
-under the terms as perl itself.
+under the same terms as perl itself.
 
 =cut
 

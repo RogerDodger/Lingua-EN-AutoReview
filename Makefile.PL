@@ -5,10 +5,6 @@ use inc::Module::Install;
 
 name     'Lingua-EN-AutoReview';
 all_from 'lib/Lingua/EN/AutoReview.pm';
-author   q{Cameron Thornton <cthor@cpan.org>};
-license  'artistic2';
-
-perl_version 5.014;
 
 tests_recursive('t');
 
@@ -26,10 +22,12 @@ build_requires (
 
 requires (
    'Moose' => 0,
+   'File::ShareDir' => 0,
    'Moose::Meta::Attribute::Native::Trait::Array' => 0,
 );
 
-install_script "script/*";
+install_share 'module', 'Lingua::EN::AutoReview', 'share';
+install_script "script/autoreview.pl";
 
 install_as_cpan;
 auto_install;
